@@ -1,26 +1,21 @@
 `timescale 1ns / 1ps
-//////////////////////////////////////////////////////////////////////////////////
-// Company: 
-// Engineer: 
-// 
-// Create Date: 2026/08/30 14:45:47
-// Design Name: 
-// Module Name: ram_sv
-// Project Name: 
-// Target Devices: 
-// Tool Versions: 
-// Description: 
-// 
-// Dependencies: 
-// 
-// Revision:
-// Revision 0.01 - File Created
-// Additional Comments:
-// 
-//////////////////////////////////////////////////////////////////////////////////
 
+module ram(
+  input  logic       clk,
+  input  logic       we,
+  input  logic [7:0] addr,
+  input  logic [7:0] wdata,
+  output logic [7:0] rdata
+);
 
-module ram_sv(
+  logic [7:0] ram_file[0:255];
 
-    );
+  always_ff @(posedge clk)begin
+    if(we)
+      ram_file[addr]<=wdata;
+  end
+
+  // CL output
+  assign rdata = ram_file[addr];
+
 endmodule
