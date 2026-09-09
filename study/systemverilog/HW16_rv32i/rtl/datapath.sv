@@ -74,10 +74,10 @@ module datapath (
         .imm_extend(imm_extend),
         .pc        (instr_addr),
         .pc_imm    (pc_imm),
-        .pc_4      (pc_4)
+        .pc_4      (pc_4),
         .jal       (jal),
         .jalr      (jalr),
-        .rs1       (rf_rd1),
+        .rs1       (rf_rd1)
 );
 
 endmodule
@@ -129,13 +129,8 @@ module reg_file (
     logic [31:0] ram_file[1:31];
 
     always_ff @(posedge clk) begin
-        if (!rst_n) begin
-`ifdef SIMULATION
-            for (int i = 0; i < 32; i++) ram_file[i] <= i;
-`else
-            for (int i = 0; i < 32; i++) ram_file[i] <= 0;
-`endif
-        end else if (we) ram_file[wa] <= wd;
+        if (we)
+          ram_file[wa] <= wd;
     end
 
     assign rd1 = (ra1 != 0) ? ram_file[ra1] : 32'd0;
@@ -227,7 +222,7 @@ module imm_extender
             imm_extend = {
                 {20{instr_code[31]}}, instr_code[31:25], instr_code[11:7]
             };
-            OP_ITYPE, OP_ILTYPE:
+            OP_ITYPE, OP_ILTYPE, OP_JLTYPE:
             imm_extend = {{20{instr_code[31]}}, instr_code[31:20]};
             OP_BTYPE:
             imm_extend = {
@@ -241,7 +236,7 @@ module imm_extender
             OP_ULTYPE, OP_UATYPE: begin
                 imm_extend = {instr_code[31:12], 12'b0};
             end
-            OP_JTYPE: immm_extend = {{12{instr_code[31]}},instr_code[19:12],instr_code[11],instr_code[10:1],1'b0};
+            OP_JTYPE: imm_extend = {{12{instr_code[31]}},instr_code[19:12],instr_code[20],instr_code[30:21],1'b0};
             //20bit + 1bit + 1bit + 6bit + 4bit + 1bit
             default: imm_extend = 32'h0000_0000;
         endcase
