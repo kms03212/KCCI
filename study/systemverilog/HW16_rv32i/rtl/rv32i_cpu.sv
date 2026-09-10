@@ -36,6 +36,7 @@ module rv32i_cpu (
     logic       branch;
     logic       jal;
     logic       jalr;
+    logic       pc_en;
 
     control_unit U_CONTROL_UNIT (.*);
 

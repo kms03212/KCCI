@@ -4,6 +4,7 @@
 module datapath (
     input  logic        clk,
     input  logic        rst_n,
+    input  logic       pc_en,
     input  logic        rf_we,
     input  logic        alusrc_sel,
     input  logic [ 3:0] alu_control,
@@ -23,8 +24,12 @@ module datapath (
     logic [31:0] pc_imm, pc_4;
     logic b_taken;
 
-    assign daddr  = alu_result;
-    assign dwdata = rf_rd2;
+    logic [31:0] dec2exe_rs1, dec2exe_rs2, dec2exe_imm;
+    logic [31:0] exe2mem_alu, exe2mem_rs2;
+    logic [31:0] mem2wb_rdata;
+
+    assign daddr  = exe2mem_alu;
+    assign dwdata = exe2mem_rs2;
 
     reg_file U_REG_FILE (
         .clk  (clk),
@@ -37,19 +42,64 @@ module datapath (
         .rd1  (rf_rd1),
         .rd2  (rf_rd2)
     );
+
+    // decode to execute
+    register U_DEC_RS1(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (rf_rd1),
+        .data_out  (dec2exe_rs1)
+    );
+
+    register U_DEC_RS2(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (rf_rd2),
+        .data_out  (dec2exe_rs2)
+    );
+
+    register U_DEC_IMM(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (imm_extend),
+        .data_out  (dec2exe_imm)
+    );
+
+    // execute to mem
+    register U_EXE_ALU(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (alu_result),
+        .data_out  (exe2mem_alu)
+    );
+
+    register U_EXE_RS2(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (dec2exe_rs2),
+        .data_out  (exe2mem_rs2)
+    );
+
+    // mem to wb
+    register U_MEM_RDATA(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (drdata),
+        .data_out  (mem2wb_rdata)
+    );
     imm_extender U_IMM_EXTEND (
         .instr_code(instr_code),
         .imm_extend(imm_extend)
     );
     mux_2x1 U_ALUSRC_MUX (
         .sel    (alusrc_sel),
-        .in0    (rf_rd2),
-        .in1    (imm_extend),
+        .in0    (dec2exe_rs2),
+        .in1    (dec2exe_imm),
         .mux_out(alusrc_muxout)
     );
 
     alu U_ALU (
-        .rs1        (rf_rd1),
+        .rs1        (dec2exe_rs1),
         .rs2        (alusrc_muxout),
         .alu_control(alu_control),
         .alu_result (alu_result),
@@ -59,8 +109,8 @@ module datapath (
     mux_5x1 U_WB_MUX (
         .sel(rf_srcsel),
         .in0(alu_result),
-        .in1(drdata),
-        .in2(imm_extend),
+        .in1(mem2wb_rdata),
+        .in2(dec2exe_imm),
         .in3(pc_imm),
         .in4(pc_4),
         .mux_out(wb_muxout)
@@ -71,14 +121,31 @@ module datapath (
         .rst_n     (rst_n),
         .branch    (branch),
         .b_taken   (b_taken),
-        .imm_extend(imm_extend),
+        .imm_extend(dec2exe_imm),
+        .pc_en     (pc_en),
         .pc        (instr_addr),
         .pc_imm    (pc_imm),
         .pc_4      (pc_4),
         .jal       (jal),
         .jalr      (jalr),
-        .rs1       (rf_rd1)
+        .rs1       (dec2exe_rs1)
 );
+
+endmodule
+
+module register(
+    input  logic        clk,
+    input  logic        rst_n,
+    input  logic [31:0] data_in,
+    output logic [31:0] data_out
+);
+
+    always_ff @(posedge clk) begin
+        if(!rst_n)
+        data_out <= 32'd0;
+        else
+        data_out <= data_in;
+    end
 
 endmodule
 
@@ -253,6 +320,7 @@ module program_counter (
     input  logic        jalr,
     input  logic [31:0] imm_extend,
     input  logic [31:0] rs1,
+    input  logic        pc_en,
     output logic [31:0] pc,
     output logic [31:0] pc_imm, // pc_imm
     output logic [31:0] pc_4
@@ -261,6 +329,7 @@ module program_counter (
     logic [31:0] pc_next;
     logic [31:0] pc_jalr;
     logic pc_srcsel;
+    logic [31:0] exe2fetch_pc_next;
 
     assign pc = register_pc;
     assign pc_srcsel = (branch & b_taken)|jal|jalr;
@@ -270,8 +339,16 @@ module program_counter (
 
     always_ff @(posedge clk) begin
         if (!rst_n) register_pc <= 32'd0;
-        else register_pc <= pc_next;
+        else if(pc_en)
+        register_pc <= exe2fetch_pc_next;
     end
+
+    register U_EXE_PC(
+        .clk       (clk),
+        .rst_n     (rst_n),
+        .data_in   (pc_next),
+        .data_out  (exe2fetch_pc_next)
+    );
 
     mux_2x1 U_PC_RS1_MUX (
         .sel(jalr),
@@ -287,5 +364,4 @@ module program_counter (
         .mux_out(pc_next)
     );
 endmodule
-
 
